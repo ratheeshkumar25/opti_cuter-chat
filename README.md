@@ -1,4 +1,4 @@
-# 🚀 **OptiCuter Chat-Service**  
+# 🚀 **OptiCutter Chat-Service**  
 A comprehensive **real-time chat service** with support for video calls, review submissions, and video uploads — all underpinned by a robust, production-ready microservices architecture. Built with clean architecture principles for maintainability, scalability, and performance.  
 
 ---
