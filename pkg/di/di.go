@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/ratheeshkumar25/opti_cut_chat_service/config"
+	"github.com/ratheeshkumar25/opti_cut_chat_service/pkg/client"
 	"github.com/ratheeshkumar25/opti_cut_chat_service/pkg/db"
 	"github.com/ratheeshkumar25/opti_cut_chat_service/pkg/handler"
 	"github.com/ratheeshkumar25/opti_cut_chat_service/pkg/repo"
@@ -21,7 +22,13 @@ func Init() {
 	mongoDB := db.Database(cnfg.DBName)
 	chatRepo := repo.NewChatRepository(mongoDB)
 
-	chatSVC := service.NewChatService(chatRepo)
+	// Initialize MaterialServiceClient
+	materialClient, err := client.ClientDial(*cnfg)
+	if err != nil {
+		log.Fatalf("failed to connect to Material Service: %v", err)
+	}
+
+	chatSVC := service.NewChatService(chatRepo, materialClient)
 	chatServer := handler.NewChatServiceServer(chatSVC)
 	err = server.NewGrpcUserServer(cnfg.GrpcPort, chatServer)
 	if err != nil {

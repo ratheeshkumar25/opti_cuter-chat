@@ -10,7 +10,7 @@ import (
 
 // Createchat implements interfaces.ChatRepoInter.
 func (c *ChatRepo) Createchat(chat *model.History) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	_, err := c.Collection.InsertOne(ctx, chat)

@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "./";
+
+// Material Service
+service MaterialService {
+    // Service to handle material management
+    rpc FindMaterialByID(MaterialID) returns (Material);
+    rpc FindAllMaterial(MaterialNoParams) returns (MaterialList);
+    
+}
+
+// Material messages
+message Material {
+    uint32 Material_ID = 1;
+    string Material_Name = 2;
+    string Description = 3;
+    int32 Stock = 4;
+    double Price = 5;
+}
+
+message MaterialResponse {
+    enum Status {
+        OK = 0;
+        ERROR = 1;
+    }
+
+    Status status = 1;
+    string message = 2;
+    oneof payload {
+        string error = 3;
+        string data = 4;
+    }
+}
+
+message MaterialNoParams {}
+
+message MaterialList {
+    repeated Material Materials = 1;
+}
+
+message MaterialID {
+    uint32 ID = 1; 
+}

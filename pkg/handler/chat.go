@@ -36,73 +36,104 @@ func (c *ChatServiceServer) Connect(csi pb.ChatService_ConnectServer) error {
 // receiveFromStream handles incoming messages from the client.
 func (c *ChatServiceServer) receiveFromStream(csi pb.ChatService_ConnectServer, errCh chan error) {
 	for {
-		msg, err := csi.Recv()
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				log.Println("Client disconnected gracefully.")
-			} else {
-				log.Printf("Error receiving message from client: %v", err)
-			}
-			errCh <- err
+		select {
+		case <-csi.Context().Done():
+			log.Println("Client disconnected or context canceled.")
+			errCh <- csi.Context().Err()
 			return
-		}
-
-		// Add the received message to the queue
-		messageQueue.queue <- model.History{
-			UserID:     uint(msg.User_ID),
-			ReceiverID: uint(msg.Receiver_ID),
-			Message:    msg.Content,
-		}
-
-		// Persist the message in the database (business logic)
-		go func() {
-			if err := c.svc.CreateChatService(msg); err != nil {
-				log.Printf("Error saving message to database: %v", err)
+		default:
+			// Proceed to receive the message from the stream.
+			msg, err := csi.Recv()
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					log.Println("Client disconnected gracefully.")
+					return
+				}
+				log.Printf("Error receiving message from client: %v", err)
+				errCh <- err
+				return
 			}
-		}()
+
+			// Process the message and queue it for later
+			messageQueue.queue <- model.History{
+				UserID:     uint(msg.UserId),
+				ReceiverID: uint(msg.ReceiverId),
+				Message:    msg.Content,
+			}
+
+			// Persist the message asynchronously in the database
+			go func() {
+				if err := c.svc.CreateChatService(msg); err != nil {
+					log.Printf("Error saving message to database: %v", err)
+				}
+			}()
+		}
 	}
 }
 
 // sendToStream sends queued messages to the client.
 func (c *ChatServiceServer) sendToStream(csi pb.ChatService_ConnectServer, errCh chan error) {
-	select {
-	case msg := <-messageQueue.queue:
-		if msg.UserID != msg.ReceiverID { // Avoid sending messages to the same user
-			// Check if the context is canceled before sending
-			if err := csi.Context().Err(); err != nil {
-				log.Println("Context canceled, stopping message send.")
-				errCh <- err
-				return
-			}
-			err := csi.Send(&pb.Message{
-				User_ID:     uint32(msg.UserID),
-				Receiver_ID: uint32(msg.ReceiverID),
-				Content:     msg.Message,
-			})
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					log.Println("Client disconnected during send.")
+	for {
+		select {
+		case <-csi.Context().Done():
+			log.Println("Client disconnected or context canceled.")
+			errCh <- csi.Context().Err()
+			return
+		default:
+			// Try to send a message to the client from the queue.
+			select {
+			case msg := <-messageQueue.queue:
+				//  if the message is for the same user
+				if msg.UserID != msg.ReceiverID {
+					// Check if the context is canceled before sending the message
+					if err := csi.Context().Err(); err != nil {
+						log.Println("Context canceled, stopping message send.")
+						errCh <- err
+						return
+					}
+
+					// Send the message to the client
+					err := csi.Send(&pb.Message{
+						UserId:     uint32(msg.UserID),
+						ReceiverId: uint32(msg.ReceiverID),
+						Content:    msg.Message,
+					})
+					if err != nil {
+						if errors.Is(err, context.Canceled) {
+							log.Println("Client disconnected during send.")
+						} else {
+							log.Printf("Error sending message to client: %v", err)
+						}
+						errCh <- err
+						return
+					}
 				} else {
-					log.Printf("Error sending message to client: %v", err)
+					// Send self-message back to the sender
+					err := csi.Send(&pb.Message{
+						UserId:     uint32(msg.UserID),
+						ReceiverId: uint32(msg.UserID),
+						Content:    msg.Message,
+					})
+					if err != nil {
+						log.Printf("Error sending self-message to client: %v", err)
+						errCh <- err
+					}
 				}
-				errCh <- err
-				return
+			default:
+				// Sleep briefly if no messages to process
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
-	default:
-		// Sleep briefly if no messages to process
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-// FetchHistory fetches chat history for a specific conversation.
 func (c *ChatServiceServer) FetchHistory(ctx context.Context, p *pb.ChatID) (*pb.ChatHistory, error) {
 	response, err := c.svc.FetchChatService(p)
 	if err != nil {
-		log.Printf("Error fetching chat history: %v", err)
-		return nil, err
+		return response, err
 	}
 	return response, nil
+
 }
 
 func (c *ChatServiceServer) StartVideoCall(ctx context.Context, p *pb.VideoCallRequest) (*pb.VideoCallResponse, error) {
