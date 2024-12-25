@@ -14,6 +14,6 @@ WORKDIR /app
 
 COPY --from=builder /app/chatservice .
 
-COPY ./cmd/.env ./
+COPY .env /app/
 
 CMD ["./chatservice"]

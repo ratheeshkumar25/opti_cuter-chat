@@ -30,7 +30,7 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # Create .env file using GitHub secrets variables- because of .env file secret credentials to be hidden from repo
+    # Create .env file using GitHub secrets variables- to copy to container
     - name: Create .env file
       run: |
         echo "DBURL=${{ secrets.DBURL }}" >> .env
